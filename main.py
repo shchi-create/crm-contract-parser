@@ -41,10 +41,23 @@ docs_service = build("docs", "v1", credentials=credentials)
 def write_json_to_doc(data: dict):
     """Очищаем документ и вставляем JSON"""
     text = json.dumps(data, ensure_ascii=False, indent=2)
+
+    # 1. Получаем текущий документ
+    doc = docs_service.documents().get(documentId=OUTPUT_DOC_ID).execute()
+    content_length = doc.get('body', {}).get('content', [])
+    if not content_length:
+        end_index = 1
+    else:
+        # Последний элемент содержит реальный endIndex
+        end_index = content_length[-1]['endIndex']
+
     requests = [
-        {"deleteContentRange": {"range": {"startIndex": 1, "endIndex": 10000}}},
+        # Очистить весь контент
+        {"deleteContentRange": {"range": {"startIndex": 1, "endIndex": end_index}}},
+        # Вставить новый текст
         {"insertText": {"location": {"index": 1}, "text": text}}
     ]
+
     docs_service.documents().batchUpdate(documentId=OUTPUT_DOC_ID, body={"requests": requests}).execute()
 
 # --------------------
