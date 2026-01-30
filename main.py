@@ -68,29 +68,39 @@ def load_sheet_records(sheet_name: str) -> list[dict]:
 
 
 def write_json_to_doc(data: dict) -> None:
+    # превращаем dict в json
     text = json.dumps(data, ensure_ascii=False, indent=2)
 
-    requests = [
-        {
+    # получаем текущее состояние документа
+    doc = docs_service.documents().get(documentId=OUTPUT_DOC_ID).execute()
+    end_index = doc['body']['content'][-1]['endIndex']
+
+    requests = []
+
+    # если документ не пустой — удалить содержимое
+    if end_index > 1:
+        requests.append({
             "deleteContentRange": {
                 "range": {
                     "startIndex": 1,
-                    "endIndex": 1_000_000
+                    "endIndex": end_index - 1  # обязательно меньше, чем endIndex последнего элемента
                 }
             }
-        },
-        {
-            "insertText": {
-                "location": {"index": 1},
-                "text": text
-            }
+        })
+
+    # вставить новый текст
+    requests.append({
+        "insertText": {
+            "location": {"index": 1},
+            "text": text
         }
-    ]
+    })
 
     docs_service.documents().batchUpdate(
         documentId=OUTPUT_DOC_ID,
         body={"requests": requests}
     ).execute()
+
 
 # --------------------
 # FLASK APP
