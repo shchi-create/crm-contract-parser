@@ -1,43 +1,54 @@
 import os
+import json
 from flask import Flask, request, render_template_string
+
 import gspread
 from google.oauth2.service_account import Credentials
-import json
+from googleapiclient.discovery import build
 
 # --------------------
-# CONFIG
+# ENV VARIABLES
 # --------------------
 
 SPREADSHEET_ID = os.getenv("SPREADSHEET_ID")
 SERVICE_ACCOUNT_JSON = os.getenv("SERVICE_ACCOUNT_JSON")
+OUTPUT_DOC_ID = os.getenv("OUTPUT_DOC_ID")
+
+if not all([SPREADSHEET_ID, SERVICE_ACCOUNT_JSON, OUTPUT_DOC_ID]):
+    raise RuntimeError("Missing required environment variables")
+
+# --------------------
+# GOOGLE AUTH
+# --------------------
 
 SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive"
+    "https://www.googleapis.com/auth/spreadsheets.readonly",
+    "https://www.googleapis.com/auth/documents",
 ]
-
-# --------------------
-# GOOGLE SHEETS
-# --------------------
 
 credentials_info = json.loads(SERVICE_ACCOUNT_JSON)
 credentials = Credentials.from_service_account_info(
-    credentials_info, scopes=SCOPES
+    credentials_info,
+    scopes=SCOPES
 )
 
+# Sheets
 gc = gspread.authorize(credentials)
 spreadsheet = gc.open_by_key(SPREADSHEET_ID)
+
+# Docs
+docs_service = build("docs", "v1", credentials=credentials)
 
 # --------------------
 # HELPERS
 # --------------------
 
-def load_sheet_records(sheet_name):
+def load_sheet_records(sheet_name: str) -> list[dict]:
     """
-    Читает лист с двухстрочным заголовком:
-    1 строка — ключи
-    2 строка — описания
-    Данные — с 3 строки
+    Sheet format:
+    row 1 — keys
+    row 2 — descriptions
+    row 3+ — data
     """
     worksheet = spreadsheet.worksheet(sheet_name)
     values = worksheet.get_all_values()
@@ -55,6 +66,31 @@ def load_sheet_records(sheet_name):
 
     return records
 
+
+def write_json_to_doc(data: dict) -> None:
+    text = json.dumps(data, ensure_ascii=False, indent=2)
+
+    requests = [
+        {
+            "deleteContentRange": {
+                "range": {
+                    "startIndex": 1,
+                    "endIndex": 1_000_000
+                }
+            }
+        },
+        {
+            "insertText": {
+                "location": {"index": 1},
+                "text": text
+            }
+        }
+    ]
+
+    docs_service.documents().batchUpdate(
+        documentId=OUTPUT_DOC_ID,
+        body={"requests": requests}
+    ).execute()
 
 # --------------------
 # FLASK APP
@@ -93,52 +129,23 @@ def run():
                 message=f"Trip_ID {trip_id} not found in Trips sheet"
             )
 
-        result = {
+        result_json = {
             "Trip_ID": trip_id,
             "Trips": matching_trips
         }
 
-        # запись json в Google Docs
-    write_json_to_doc(result_json)
-return "JSON written to existing document"
+        write_json_to_doc(result_json)
 
-DOC_ID = os.getenv("OUTPUT_DOC_ID")
+        message = f"JSON for Trip_ID {trip_id} written to document"
 
-credentials = Credentials.from_service_account_info(
-    credentials_info,
-    scopes=[
-        "https://www.googleapis.com/auth/documents"
-    ]
-)
+    return render_template_string(HTML_FORM, message=message)
 
-docs_service = build("docs", "v1", credentials=credentials)
-
-def write_json_to_doc(data: dict):
-    text = json.dumps(data, ensure_ascii=False, indent=2)
-
-    requests = [
-        # 1. очистить документ
-        {
-            "deleteContentRange": {
-                "range": {
-                    "startIndex": 1,
-                    "endIndex": 1_000_000
-                }
-            }
-        },
-        # 2. вставить новый текст
-        {
-            "insertText": {
-                "location": {"index": 1},
-                "text": text
-            }
-        }
-    ]
-
-    docs_service.documents().batchUpdate(
-        documentId=DOC_ID,
-        body={"requests": requests}
-    ).execute()
+# --------------------
+# ENTRYPOINT
+# --------------------
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
+    app.run(
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", 8080))
+    )
