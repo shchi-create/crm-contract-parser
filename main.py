@@ -39,20 +39,25 @@ spreadsheet = gc.open_by_key(SPREADSHEET_ID)
 docs_service = build("docs", "v1", credentials=credentials)
 
 def write_json_to_doc(data: dict):
-    """Очищаем документ и вставляем JSON"""
+    """Очищаем документ и вставляем JSON безопасно для любых размеров"""
     text = json.dumps(data, ensure_ascii=False, indent=2)
 
-    # 1. Получаем текущий документ
+    # Получаем текущий документ
     doc = docs_service.documents().get(documentId=OUTPUT_DOC_ID).execute()
-    content_length = doc.get('body', {}).get('content', [])
-    if not content_length:
+    content = doc.get('body', {}).get('content', [])
+
+    if not content:
         end_index = 1
     else:
         # Последний элемент содержит реальный endIndex
-        end_index = content_length[-1]['endIndex']
+        end_index = content[-1]['endIndex']
+
+    # Не включаем последний символ (обычно это новая строка)
+    if end_index > 1:
+        end_index -= 1
 
     requests = [
-        # Очистить весь контент
+        # Очистить весь контент кроме завершающего символа
         {"deleteContentRange": {"range": {"startIndex": 1, "endIndex": end_index}}},
         # Вставить новый текст
         {"insertText": {"location": {"index": 1}, "text": text}}
