@@ -52,8 +52,15 @@ def get_sheet_records(sheet_name):
     """Return list of dicts for sheet_name or [] if sheet not found."""
     try:
         sh = gc.open_by_key(SPREADSHEET_ID)
-        ws = sh.worksheet(sheet_name)
-        records = ws.get_all_records()
+        values = worksheet.get_all_values()
+
+headers = values[0]        # первая строка — ключи
+data_rows = values[2:]     # пропускаем вторую (описания)
+
+records = [
+    dict(zip(headers, row))
+    for row in data_rows
+]
         return records
     except Exception as e:
         # if sheet doesn't exist or other error
