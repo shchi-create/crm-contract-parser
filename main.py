@@ -99,20 +99,51 @@ def run():
         }
 
         # запись json в Google Docs
-        doc = gc.create(f"trip_{trip_id}_json")
-        doc.share(None, perm_type="anyone", role="reader")
+    write_json_to_doc(result_json)
+return "JSON written to existing document"
 
-        doc_worksheet = doc.add_worksheet(
-            title="json",
-            rows=1000,
-            cols=1
-        )
-        doc_worksheet.update("A1", [[json.dumps(result, ensure_ascii=False, indent=2)]])
+      from googleapiclient.discovery import build
+from google.oauth2.service_account import Credentials
+import json
+import os
 
-        message = f"JSON created: {doc.url}"
+DOC_ID = os.getenv("OUTPUT_DOC_ID")
 
-    return render_template_string(HTML_FORM, message=message)
+credentials = Credentials.from_service_account_info(
+    credentials_info,
+    scopes=[
+        "https://www.googleapis.com/auth/documents"
+    ]
+)
 
+docs_service = build("docs", "v1", credentials=credentials)
+
+def write_json_to_doc(data: dict):
+    text = json.dumps(data, ensure_ascii=False, indent=2)
+
+    requests = [
+        # 1. очистить документ
+        {
+            "deleteContentRange": {
+                "range": {
+                    "startIndex": 1,
+                    "endIndex": 1_000_000
+                }
+            }
+        },
+        # 2. вставить новый текст
+        {
+            "insertText": {
+                "location": {"index": 1},
+                "text": text
+            }
+        }
+    ]
+
+    docs_service.documents().batchUpdate(
+        documentId=DOC_ID,
+        body={"requests": requests}
+    ).execute()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
