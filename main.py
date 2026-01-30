@@ -9,7 +9,7 @@ import json
 # --------------------
 
 SPREADSHEET_ID = os.getenv("SPREADSHEET_ID")
-SERVICE_ACCOUNT_JSON = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+SERVICE_ACCOUNT_JSON = os.getenv("SERVICE_ACCOUNT_JSON")
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
