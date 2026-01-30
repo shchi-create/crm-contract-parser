@@ -102,11 +102,6 @@ def run():
     write_json_to_doc(result_json)
 return "JSON written to existing document"
 
-      from googleapiclient.discovery import build
-from google.oauth2.service_account import Credentials
-import json
-import os
-
 DOC_ID = os.getenv("OUTPUT_DOC_ID")
 
 credentials = Credentials.from_service_account_info(
